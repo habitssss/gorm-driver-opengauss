@@ -4,6 +4,11 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
 	pq "gitee.com/opengauss/openGauss-connector-go-pq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
@@ -11,10 +16,6 @@ import (
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/migrator"
 	"gorm.io/gorm/schema"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type Dialector struct {
@@ -106,7 +107,23 @@ func (dialector Dialector) Name() string {
 //var timeZoneMatcher = regexp.MustCompile("(time_zone|TimeZone)=(.*?)($|&| )")
 
 func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
-	db.NamingStrategy = Namer{}
+	// Check if a custom naming strategy is provided
+	if db.NamingStrategy == nil {
+		// No naming strategy provided, use our default
+		db.NamingStrategy = Namer{}
+	} else if ns, ok := db.NamingStrategy.(schema.NamingStrategy); ok {
+		// If it's the default GORM naming strategy, apply our custom replacer
+		if ns.NameReplacer != nil {
+			// If a custom NameReplacer is provided, use it with our Namer
+			namer := Namer{ns}
+			db.NamingStrategy = namer
+		} else {
+			// Otherwise, just use our default Namer
+			db.NamingStrategy = Namer{}
+		}
+	}
+	// Otherwise, keep the custom naming strategy as is
+
 	// register callbacks
 	//if !dialector.WithoutReturning {
 	callbackConfig := &callbacks.Config{
